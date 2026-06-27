@@ -1,0 +1,112 @@
+name: Construction et déploiement de entraide
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  create-folder:
+    name: Créer un dossier distant
+    runs-on: ubuntu-latest
+    steps:
+      - name: Créer un dossier sur le serveur distant
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.PRIVATE_KEY }}
+          port: ${{ secrets.PORT }}
+          script: mkdir -p /var/www/html/entraide/entraide_backend
+
+  build:
+    runs-on: ubuntu-latest
+    needs: create-folder
+    steps:
+      - name: Télécharger le code source
+        uses: actions/checkout@v3
+
+      - name: Configurer JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+#Ok
+      # - name: Configurer JDK 17
+      - name: Construire le projet avec Maven
+        run: mvn -Dmaven.test.skip=true -B package --file pom.xml
+
+      - name: Renommer le fichier JAR
+        run: mv target/entraide-0.0.1-SNAPSHOT.jar entraide.jar
+
+      - name: Copier le fichier JAR via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.PRIVATE_KEY }}
+          port: ${{ secrets.PORT }}
+          source: "entraide.jar"
+          target: /var/www/html/entraide/entraide_backend
+          strip_components: 0
+
+  run-jar:
+    name: Déployer et lancer le service
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Configurer et démarrer le service système
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.PRIVATE_KEY }}
+          port: ${{ secrets.PORT }}
+          request_pty: true
+          script: |
+            echo "Début du fichier log :"
+            sudo head -n 50 /var/log/entraide.log
+            set -x
+            sudo whoami
+            echo "[Unit]
+            Description=Entraide Service
+            After=network.target
+
+            [Service]
+            ExecStart=/usr/bin/java -jar /var/www/html/entraide/entraide_backend/entraide.jar
+            Restart=always
+            User=essitech
+            WorkingDirectory=/var/www/html/entraide/entraide_backend
+            StandardOutput=append:/var/log/entraide.log
+            StandardError=append:/var/log/entraide.log
+
+            [Install]
+            WantedBy=multi-user.target" | sudo tee /etc/systemd/system/entraide.service
+
+            # Recharger systemd et démarrer le service
+            sudo systemctl daemon-reload
+            sudo systemctl enable entraide.service
+            sudo systemctl stop entraide.service
+            sudo systemctl restart entraide.service
+
+      - name: Vérifier l'état du service
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.PRIVATE_KEY }}
+          port: ${{ secrets.PORT }}
+          script: |
+            echo "Vérification de l'état du service entraide :"
+            sudo systemctl status entraide.service
+
+      - name: Vérifier les journaux du service
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.PRIVATE_KEY }}
+          port: ${{ secrets.PORT }}
+          script: |
+            echo "Affichage des journaux récents :"
+            sudo tail -n 50 /var/log/entraide.log

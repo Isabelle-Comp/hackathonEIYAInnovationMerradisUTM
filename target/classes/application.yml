@@ -1,0 +1,36 @@
+# src/main/resources/application.yml
+#OK
+server:
+  port: 8081
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/hackathon
+    username: eiya
+    password: root
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  application:
+    name: EIYAInnovations
+  mail:
+    host: sandbox.smtp.mailtrap.io
+    port: 587
+    username: 1f526ccae640b5
+    password: c3fcbff57107db
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+jwt:
+  secret: 9a5Tm3pNlKo1WQcM4XsDg6EzBvYjRfAqLuZr7Ih8UwF2JyPx0OcVtSnHkGt4
+photo:
+  uploads:
+    profileService: ./uploads/photo/
+
+
